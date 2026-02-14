@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Marin County Coverage Map</title>
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+  <style>
+    html, body { height: 100%; margin: 0; }
+    #map { height: 100%; width: 100%; background: #ffffff; }
+
+    /* Minimal UI */
+    .leaflet-control-attribution { display:none; }
+    .leaflet-control-zoom a { border-radius: 10px; }
+
+    /* “Hotspot” marker (green dot with concentric ripple rings) */
+    .hotspot {
+      position: relative;
+      width: var(--d, 34px);
+      height: var(--d, 34px);
+      pointer-events: auto;
+    }
+
+    .hotspot .ring {
+      position: absolute;
+      inset: 0;
+      border-radius: 999px;
+      border: 2px solid rgba(186, 218, 85, 0.55);
+      box-shadow: 0 0 0 1px rgba(186, 218, 85, 0.25);
+      transform: scale(0.55);
+      opacity: 0.0;
+      animation: pulse 2.4s infinite ease-out;
+    }
+    .hotspot .ring.r2 { animation-delay: 0.55s; }
+    .hotspot .ring.r3 { animation-delay: 1.10s; }
+    .hotspot .ring.r4 { animation-delay: 1.65s; }
+
+    .hotspot .core {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: calc(var(--d, 34px) * 0.33);
+      height: calc(var(--d, 34px) * 0.33);
+      transform: translate(-50%, -50%);
+      background: #bada55;
+      border: 2px solid #1a1a1a;
+      border-radius: 999px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.18);
+    }
+
+    @keyframes pulse {
+      0%   { transform: scale(0.55); opacity: 0.0; }
+      12%  { opacity: 0.65; }
+      100% { transform: scale(1.65); opacity: 0.0; }
+    }
+
+    /* Popup styling */
+    .leaflet-popup-content-wrapper {
+      border-radius: 14px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+    }
+    .popup-title {
+      font: 600 14px/1.2 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      margin: 0 0 6px 0;
+    }
+    .popup-meta {
+      font: 12px/1.35 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      margin: 0;
+      color: #333;
+    }
+    .bar {
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(138, 47, 120, 0.14);
+      overflow: hidden;
+      margin-top: 10px;
+    }
+    .bar > div {
+      height: 100%;
+      width: var(--w, 20%);
+      background: rgba(138, 47, 120, 0.75);
+      border-radius: 999px;
+    }
+
+    /* Legend */
+    .legend {
+      background: rgba(255,255,255,0.92);
+      backdrop-filter: blur(6px);
+      padding: 10px 12px;
+      border-radius: 14px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+      font: 12px/1.35 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      color: #222;
+    }
+    .legend h3 {
+      font-size: 13px;
+      margin: 0 0 6px 0;
+    }
+    .legend .row { display:flex; gap:10px; align-items:center; margin: 6px 0; }
+    .swatch {
+      width: 14px; height: 14px; border-radius: 4px;
+      background: rgba(138, 47, 120, 0.80);
+    }
+    .note { color:#444; margin-top: 6px; }
+
+    /* County fill */
+    .county-fill {
+      fill: rgba(138, 47, 120, 0.80);
+      stroke: rgba(138, 47, 120, 0.00);
+    }
+  
+    /* Always-on count labels next to each hotspot */
+    .leaflet-tooltip.count-label {
+      background: transparent;
+      border: none;
+      box-shadow: none;
+      padding: 0;
+      margin: 0;
+      color: #111;
+      font-weight: 700;
+      font-size: 15px;
+      text-shadow:
+        -1px -1px 0 #fff,
+         1px -1px 0 #fff,
+        -1px  1px 0 #fff,
+         1px  1px 0 #fff;
+    }
+
+  </style>
+</head>
+<body>
+<div id="map"></div>
+
+<script>
+  const coverage = [{"city": "Bolinas", "count": 1, "lat": 37.909, "lon": -122.686, "size": 18}, {"city": "Corte Madera", "count": 6, "lat": 37.925, "lon": -122.527, "size": 21}, {"city": "Fairfax", "count": 4, "lat": 37.987, "lon": -122.588, "size": 20}, {"city": "Inverness", "count": 2, "lat": 38.101, "lon": -122.856, "size": 19}, {"city": "Kentfield", "count": 1, "lat": 37.952, "lon": -122.556, "size": 18}, {"city": "Larkspur", "count": 2, "lat": 37.934, "lon": -122.536, "size": 19}, {"city": "Mill Valley", "count": 5, "lat": 37.906, "lon": -122.545, "size": 21}, {"city": "Novato", "count": 14, "lat": 38.107, "lon": -122.569, "size": 27}, {"city": "Point Reyes Station", "count": 7, "lat": 38.069, "lon": -122.806, "size": 22}, {"city": "San Anselmo", "count": 1, "lat": 37.974, "lon": -122.562, "size": 18}, {"city": "San Rafael", "count": 38, "lat": 37.973, "lon": -122.531, "size": 44}, {"city": "Santa Venetia", "count": 1, "lat": 37.998, "lon": -122.545, "size": 18}, {"city": "Sausalito", "count": 44, "lat": 37.859, "lon": -122.486, "size": 48}];
+  const specificStories = 127;
+  const generalStories = 15;
+  const totalStories = 142;
+  const maxCount = 44;
+  const minCount = 1;
+
+  // Initialize map
+  const map = L.map('map', {
+    zoomControl: true,
+    scrollWheelZoom: true,
+    preferCanvas: true
+  });
+
+  // Subtle basemap; you can swap to "no tiles" if you want pure-art style.
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
+    maxZoom: 18
+  }).addTo(map);
+
+  // Fit bounds around points (with padding already baked in)
+  const bounds = [[37.79186, -122.92259999999999], [38.29914, -122.41940000000001]];
+  // map.fitBounds(bounds); // replaced by county boundary fit
+
+  // Marin County outline (official county boundary: FIPS 06041)
+  const marinOutline = {"type": "FeatureCollection", "features": [{"type": "Feature", "properties": {"name": "Marin County", "fips": "06041"}, "geometry": {"type": "Polygon", "coordinates": [[[-122.490727, 38.109755], [-122.491283, 38.108087], [-122.489974, 38.096961], [-122.486702, 38.090088], [-122.483757, 38.071762], [-122.492265, 38.056381], [-122.499465, 38.032165], [-122.497828, 38.019402], [-122.494556, 38.015148], [-122.481466, 38.007621], [-122.462812, 38.003367], [-122.452995, 37.996167], [-122.448413, 37.988313], [-122.448413, 37.984713], [-122.456595, 37.978823], [-122.462485, 37.981441], [-122.471975, 37.981768], [-122.488665, 37.966714], [-122.490302, 37.964751], [-122.490302, 37.959188], [-122.487684, 37.948716], [-122.480484, 37.945443], [-122.479175, 37.941516], [-122.48572, 37.937589], [-122.499465, 37.939225], [-122.503064, 37.936607], [-122.503064, 37.928753], [-122.493574, 37.921881], [-122.486375, 37.921881], [-122.478193, 37.918608], [-122.471975, 37.910427], [-122.472303, 37.902573], [-122.458558, 37.894064], [-122.448413, 37.89341], [-122.43925, 37.88392], [-122.438268, 37.880974], [-122.45005, 37.871157], [-122.462158, 37.868866], [-122.474266, 37.874429], [-122.480811, 37.873448], [-122.483429, 37.868866], [-122.483102, 37.863957], [-122.476536, 37.832812], [-122.476473, 37.832513], [-122.479151, 37.825428], [-122.47986, 37.825641], [-122.483483, 37.826728], [-122.492474, 37.82484], [-122.505383, 37.822128], [-122.522836, 37.824717], [-122.523585, 37.824828], [-122.537285, 37.830328], [-122.548986, 37.836227], [-122.561487, 37.851827], [-122.584289, 37.859227], [-122.60129, 37.875126], [-122.627113, 37.88608], [-122.639977, 37.897349], [-122.656519, 37.904519], [-122.678474, 37.906604], [-122.682171, 37.90645], [-122.693569, 37.901171], [-122.70264, 37.89382], [-122.727297, 37.904626], [-122.732898, 37.920225], [-122.736898, 37.925825], [-122.754606, 37.935527], [-122.766138, 37.938004], [-122.783244, 37.951334], [-122.791739, 37.969422], [-122.797405, 37.976657], [-122.821383, 37.996735], [-122.856573, 38.016717], [-122.882114, 38.025273], [-122.939711, 38.031908], [-122.956811, 38.02872], [-122.972378, 38.020247], [-122.981776, 38.009119], [-122.982386, 38.004274], [-122.980147, 38.000831], [-122.976764, 37.99568], [-122.97439, 37.992429], [-123.024066, 37.994878], [-123.020562, 37.999544], [-123.016303, 38.001691], [-123.011533, 38.003438], [-122.99242, 38.041758], [-122.960889, 38.112962], [-122.952086, 38.138562], [-122.949074, 38.15406], [-122.949626, 38.164041], [-122.953629, 38.17567], [-122.965408, 38.187113], [-122.96637, 38.198514], [-122.968112, 38.202428], [-122.991953, 38.233185], [-122.993959, 38.237602], [-122.993235, 38.239686], [-122.987149, 38.237538], [-122.968569, 38.242879], [-122.967203, 38.250691], [-122.977082, 38.267902], [-122.986319, 38.273164], [-122.994603, 38.283096], [-122.997106, 38.289458], [-123.002911, 38.295708], [-122.901726, 38.316943], [-122.7399, 38.207018], [-122.648986, 38.181077], [-122.565093, 38.182217], [-122.490727, 38.109755]]]}}]};
+  const countyLayer = L.geoJSON(marinOutline, {
+    style: () => ({
+      color: 'rgba(0,0,0,0)',
+      weight: 0,
+      fillColor: 'rgba(138, 47, 120, 0.80)',
+      fillOpacity: 0.80
+    })
+  }).addTo(map);
+
+  // Fit map to Marin County boundary
+  map.fitBounds(countyLayer.getBounds().pad(0.08));
+
+  // Custom hotspot icon
+  function hotspotIcon(d) {
+    const size = d.size || 34;
+    const html = `
+      <div class="hotspot" style="--d: ${size}px" aria-label="${d.city}">
+        <div class="ring r1"></div>
+        <div class="ring r2"></div>
+        <div class="ring r3"></div>
+        <div class="ring r4"></div>
+        <div class="core"></div>
+      </div>`;
+    return L.divIcon({
+      className: '',
+      html,
+      iconSize: [size, size],
+      iconAnchor: [size/2, size/2]
+    });
+  }
+
+  
+  // --- Label collision avoidance (hide overlapping labels; prioritize larger counts) ---
+  const labelItems = [];
+
+  // We'll populate labelItems as markers are created below.
+
+  // Add markers
+  coverage.forEach(d => {
+    const marker = L.marker([d.lat, d.lon], { icon: hotspotIcon(d) }).addTo(map);
+
+    const pct = Math.max(2, Math.round((d.count / specificStories) * 100));
+    const w = Math.max(6, Math.round((d.count / maxCount) * 100));
+    const content = `
+      <div>
+        <div class="popup-title">${d.city}</div>
+        <p class="popup-meta"><strong>${d.count}</strong> Marin stories (≈ ${pct}% of total)</p>
+        <div class="bar" style="--w:${w}%"><div></div></div>
+      </div>
+    `;
+    marker.bindPopup(content);
+
+    marker.bindTooltip(`${d.city} ${d.count}`, {
+      permanent: true,
+      direction: 'right',
+      offset: [14, 0],
+      opacity: 1,
+      className: 'count-label'
+    });
+    labelItems.push({ marker, count: d.count });
+});
+
+  function resolveLabelOverlaps() {
+    // Build list of visible label rects in screen space
+    const items = labelItems
+      .map(it => {
+        const tt = it.marker.getTooltip && it.marker.getTooltip();
+        const el = tt && tt.getElement ? tt.getElement() : null;
+        return { ...it, el };
+      })
+      .filter(it => it.el);
+
+    // sort by count desc, so big-coverage cities win
+    items.sort((a, b) => (b.count || 0) - (a.count || 0));
+
+    const kept = [];
+    items.forEach(it => {
+      it.el.style.display = '';
+      const r = it.el.getBoundingClientRect();
+
+      // if label is off-screen, skip keeping (Leaflet may still render it)
+      if (r.width === 0 || r.height === 0) {
+        it.el.style.display = 'none';
+        return;
+      }
+
+      const overlaps = kept.some(k => {
+        // small padding so labels don't "kiss"
+        const pad = 2;
+        return !(r.right + pad < k.left || r.left - pad > k.right || r.bottom + pad < k.top || r.top - pad > k.bottom);
+      });
+
+      if (overlaps) {
+        it.el.style.display = 'none';
+      } else {
+        kept.push({ left: r.left, right: r.right, top: r.top, bottom: r.bottom });
+      }
+    });
+  }
+
+  // Re-run on map changes (move/zoom) and after initial render
+  map.on('zoomend moveend', () => {
+    window.requestAnimationFrame(resolveLabelOverlaps);
+  });
+
+  setTimeout(() => {
+    resolveLabelOverlaps();
+  }, 250);
+
+  // Legend control
+  const legend = L.control({ position: 'bottomleft' });
+  legend.onAdd = function() {
+    const div = L.DomUtil.create('div', 'legend');
+    div.innerHTML = `
+      <h3>Marin County story coverage</h3>
+      <div class="row">
+        <span style="display:inline-flex;align-items:center;gap:8px;">
+          <span style="width:14px;height:14px;border-radius:999px;background:#bada55;border:2px solid #1a1a1a;display:inline-block;"></span>
+          <span>Story hotspots</span>
+        </span>
+      </div>
+      <div class="note">General Marin County stories: <strong>${generalStories}</strong><br/>Specific Marin County stories: <strong>${specificStories}</strong><br/>Total: <strong>${totalStories}</strong></div>
+      <div class="note" style="margin-top:2px;">Click a dot for details.</div>
+    `;
+    return div;
+  };
+  legend.addTo(map);
+
+</script>
+</body>
+</html>
